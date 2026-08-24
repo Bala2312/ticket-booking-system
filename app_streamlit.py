@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "https://ticket-booking-system-my6q.onrender.com"
 
 st.set_page_config(page_title="Ticket Booking System", layout="wide")
 st.title("🎫 Ticket Booking Platform")
