@@ -1,9 +1,23 @@
+# Environments & Secrets
 venv/
+.env
+
+# Python Bytecode
 __pycache__/
 *.pyc
-.env
+
+# Dependencies (Keep package.json tracked)
 node_modules/
-package*.json
+dist/
+build/
+
+# Local Databases & Logs
+*.db
+*.sqlite3
+*.log
+
+# Editor & OS Artifacts
 .vscode/
 .idea/
-*.log
+.DS_Store
+Thumbs.db

@@ -1,47 +1,32 @@
-from datetime import datetime, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models import ShowSeat, Waitlist, SeatStatus, WaitlistStatus
-from app.services.notification_service import NotificationService
-
-OFFER_TTL_MINUTES = 15
+from app.models import Waitlist, WaitlistStatus, ShowSeat
 
 class WaitlistService:
     @staticmethod
-    async def process_waitlist_for_seat(db: AsyncSession, show_seat_id: str):
-        stmt = select(ShowSeat).where(ShowSeat.id == show_seat_id)
-        res = await db.execute(stmt)
-        show_seat = res.scalar_one_or_none()
+    async def process_waitlist_for_seat(db, show_seat_id: str):
+        # Fetch target seat
+        seat_stmt = select(ShowSeat).where(ShowSeat.id == show_seat_id)
+        seat_res = await db.execute(seat_stmt)
+        seat = seat_res.scalars().first()
 
-        if not show_seat or show_seat.status != SeatStatus.AVAILABLE:
+        if not seat:
             return
 
+        # Query first pending waitlist entry (FIFO)
         wl_stmt = (
             select(Waitlist)
             .where(
-                Waitlist.show_id == show_seat.show_id,
+                Waitlist.show_id == seat.show_id,
                 Waitlist.status == WaitlistStatus.PENDING
             )
-            .order_by(Waitlist.created_at.asc())
+            .order_by(Waitlist.id.asc())
         )
         wl_res = await db.execute(wl_stmt)
-        next_entry = wl_res.scalar_one_or_none()
-
-        if not next_entry:
-            return
-
-        offer_expires_at = datetime.utcnow() + timedelta(minutes=OFFER_TTL_MINUTES)
         
-        show_seat.status = SeatStatus.OFFERED
-        next_entry.status = WaitlistStatus.OFFERED
-        next_entry.offered_seat_id = show_seat_id
-        next_entry.offer_expires_at = offer_expires_at
+        # Use .scalars().first() instead of .scalar_one_or_none()
+        next_entry = wl_res.scalars().first()
 
-        await db.commit()
-
-        await NotificationService.send_waitlist_offer_email(
-            recipient_email="customer@example.com",
-            event_title="Event Seat Offer",
-            waitlist_id=next_entry.id,
-            expires_at=offer_expires_at
-        )
+        if next_entry:
+            next_entry.status = WaitlistStatus.OFFERED
+            next_entry.offered_seat_id = show_seat_id
+            await db.commit()
