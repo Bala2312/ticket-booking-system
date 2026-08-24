@@ -1,14 +1,14 @@
 import io
-import base64
 import qrcode
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from app.config import settings
 
 class NotificationService:
     @staticmethod
-    def generate_qr_base64(payload_data: str) -> str:
+    def generate_qr_bytes(payload_data: str) -> bytes:
         qr = qrcode.QRCode(version=1, box_size=10, border=4)
         qr.add_data(payload_data)
         qr.make(fit=True)
@@ -16,15 +16,16 @@ class NotificationService:
         
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode()
+        return buffered.getvalue()
 
     @staticmethod
     async def send_ticket_email(recipient_email: str, booking_ref: str, event_title: str):
-        qr_b64 = NotificationService.generate_qr_base64(f"BOOKING_REF:{booking_ref}")
+        qr_bytes = NotificationService.generate_qr_bytes(f"BOOKING_REF:{booking_ref}")
         
-        msg = MIMEMultipart("alternative")
+        # Use "related" so the image is embedded directly inside the HTML body
+        msg = MIMEMultipart("related")
         msg["Subject"] = f"Your Event Ticket - Ref: {booking_ref}"
-        msg["From"] = "no-reply@ticketplatform.com"
+        msg["From"] = settings.SMTP_USER
         msg["To"] = recipient_email
 
         html = f"""
@@ -32,13 +33,19 @@ class NotificationService:
             <body>
                 <h2>Booking Confirmed for {event_title}</h2>
                 <p>Reference ID: <strong>{booking_ref}</strong></p>
-                <img src="data:image/png;base64,{qr_b64}" alt="QR Ticket"/>
+                <p><img src="cid:qr_ticket" alt="QR Ticket" width="220"/></p>
             </body>
         </html>
         """
         msg.attach(MIMEText(html, "html"))
 
-        if settings.SMTP_HOST and settings.SMTP_HOST != "smtp.mailtrap.io":
+        # Attach image as an inline CID attachment
+        img_mime = MIMEImage(qr_bytes, _subtype="png")
+        img_mime.add_header('Content-ID', '<qr_ticket>')
+        img_mime.add_header('Content-Disposition', 'inline', filename="ticket_qr.png")
+        msg.attach(img_mime)
+
+        if settings.SMTP_HOST:
             try:
                 with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
                     server.starttls()
