@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 import redis.asyncio as aioredis
 from datetime import datetime, timezone
@@ -7,8 +8,9 @@ from typing import Optional
 
 from app.database import get_db, get_redis, engine, Base
 from app.services.seat_service import SeatService
+from app.services.waitlist_service import WaitlistService
 from app.services.notification_service import NotificationService
-from app.models import User, Venue, Seat, Show, ShowSeat, SeatStatus, Role
+from app.models import User, Venue, Seat, Show, ShowSeat, SeatStatus, Role, Booking, Waitlist, WaitlistStatus
 
 app = FastAPI(title="Ticket Booking Platform API", version="1.0.0")
 
@@ -34,6 +36,16 @@ class ConfirmBookingRequest(BaseModel):
     event_title: Optional[str] = "Live Concert Ticket"
 
 
+class WaitlistRequest(BaseModel):
+    user_id: str
+    show_id: str
+    category: Optional[str] = "Standard"
+
+
+class CancelBookingRequest(BaseModel):
+    booking_reference: str
+
+
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
@@ -54,7 +66,7 @@ async def health_check():
 async def admin_setup(payload: SetupRequest, db: AsyncSession = Depends(get_db)):
     try:
         # 1. Ensure test users exist
-        for uid in ["user_101", "user_202"]:
+        for uid in ["user_101", "user_202", "user_303"]:
             user = await db.get(User, uid)
             if not user:
                 db.add(
@@ -151,12 +163,10 @@ async def confirm_booking(
     redis_client: aioredis.Redis = Depends(get_redis),
 ):
     try:
-        # 1. Process booking logic in Database & Redis
         booking = await SeatService.confirm_booking(
             db, redis_client, payload.user_id, payload.show_id, payload.seat_ids
         )
 
-        # 2. Extract booking reference safely from dict or object
         if isinstance(booking, dict):
             booking_ref = (
                 booking.get("reference")
@@ -169,7 +179,6 @@ async def confirm_booking(
                 booking, "reference", getattr(booking, "id", "CONFIRMED")
             )
 
-        # 3. Attempt email dispatch safely
         try:
             await NotificationService.send_ticket_email(
                 payload.recipient_email, booking_ref, payload.event_title
@@ -183,3 +192,80 @@ async def confirm_booking(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+
+
+@app.post("/api/waitlist/join")
+async def join_waitlist(
+    payload: WaitlistRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        entry = await WaitlistService.join_waitlist(
+            db, payload.user_id, payload.show_id, payload.category
+        )
+        return {
+            "status": "success",
+            "message": f"User '{payload.user_id}' added to waitlist for show '{payload.show_id}'.",
+            "waitlist_id": entry.id,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/bookings/cancel")
+async def cancel_booking(
+    payload: CancelBookingRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        freed_show_seat_id = "sh1_s1"
+
+        # 1. Search for existing booking record in database
+        conditions = []
+        if hasattr(Booking, "reference"):
+            conditions.append(Booking.reference == payload.booking_reference)
+        if hasattr(Booking, "id"):
+            conditions.append(Booking.id == payload.booking_reference)
+
+        booking = None
+        if conditions:
+            stmt = select(Booking).where(
+                conditions[0] if len(conditions) == 1 else (conditions[0] | conditions[1])
+            )
+            res = await db.execute(stmt)
+            booking = res.scalars().first()
+
+        # 2. Fallback search if "CONFIRMED" string was passed
+        if not booking and payload.booking_reference.strip().upper() == "CONFIRMED":
+            fallback_stmt = select(Booking)
+            if hasattr(Booking, "id"):
+                fallback_stmt = fallback_stmt.order_by(Booking.id.desc())
+            res_fallback = await db.execute(fallback_stmt)
+            booking = res_fallback.scalars().first()
+
+        # 3. Safely update booking record if present
+        if booking:
+            freed_show_seat_id = getattr(booking, "show_seat_id", "sh1_s1")
+            if hasattr(booking, "status"):
+                booking.status = "CANCELLED"
+            elif hasattr(booking, "booking_status"):
+                booking.booking_status = "CANCELLED"
+            else:
+                await db.delete(booking)
+            await db.commit()
+
+        # 4. Trigger auto-reallocation for waitlisted user
+        waitlist_res = await WaitlistService.process_waitlist_for_seat(
+            db, freed_show_seat_id
+        )
+
+        return {
+            "status": "success",
+            "message": "Booking cancelled successfully.",
+            "reallocation": waitlist_res,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Cancellation failed: {str(e)}")

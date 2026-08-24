@@ -92,7 +92,9 @@ class Booking(Base):
     reference = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     show_id = Column(String, ForeignKey("shows.id"), nullable=False)
-    total_amount = Column(Numeric(10, 2), nullable=False)
+    show_seat_id = Column(String, ForeignKey("show_seats.id"), nullable=True)
+    status = Column(String, default="CONFIRMED", nullable=False)
+    total_amount = Column(Numeric(10, 2), default=0.0, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -109,7 +111,7 @@ class Waitlist(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     show_id = Column(String, ForeignKey("shows.id"), nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    category = Column(String, nullable=False)
+    category = Column(String, nullable=True)
     status = Column(Enum(WaitlistStatus), default=WaitlistStatus.PENDING, nullable=False)
     offer_expires_at = Column(DateTime, nullable=True)
     offered_seat_id = Column(String, nullable=True)

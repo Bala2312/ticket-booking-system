@@ -102,7 +102,49 @@ with tabs[2]:
         except Exception as e:
             st.error(f"Request failed: {e}")
 
-# Tab 4: Waitlist Management
+# Tab 4: Waitlist & Reallocation Management
 with tabs[3]:
     st.header("Waitlist & Reallocation")
-    st.info("Waitlist triggers automatically when seats are full or cancelled.")
+    
+    col_w1, col_w2 = st.columns(2)
+
+    with col_w1:
+        st.subheader("Join Waitlist Queue")
+        w_uid = st.text_input("Waitlist User ID", value="user_303", key="wl_uid")
+        w_sh = st.text_input("Show ID", value="sh1", key="wl_sh")
+        w_cat = st.selectbox("Seat Category", ["VIP", "Standard", "Premium"], key="wl_cat")
+
+        if st.button("Join Waitlist"):
+            payload = {
+                "user_id": w_uid,
+                "show_id": w_sh,
+                "category": w_cat
+            }
+            try:
+                res = requests.post(f"{API_URL}/api/waitlist/join", json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    st.success(f"{data.get('message')} (Waitlist ID: {data.get('waitlist_id')})")
+                else:
+                    st.error(f"Waitlist Join Failed ({res.status_code}): {res.text}")
+            except Exception as e:
+                st.error(f"Request failed: {e}")
+
+    with col_w2:
+        st.subheader("Cancel Booking & Reallocate")
+        cancel_ref = st.text_input("Booking Reference or ID to Cancel", value="CONFIRMED", key="cancel_ref")
+
+        if st.button("Cancel Booking"):
+            payload = {"booking_reference": cancel_ref}
+            try:
+                res = requests.post(f"{API_URL}/api/bookings/cancel", json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    st.success(f"{data.get('message')}")
+                    realloc = data.get("reallocation")
+                    if realloc:
+                        st.json(realloc)
+                else:
+                    st.error(f"Cancellation Failed ({res.status_code}): {res.text}")
+            except Exception as e:
+                st.error(f"Request failed: {e}")

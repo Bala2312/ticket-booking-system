@@ -22,6 +22,9 @@ def _find_user_column():
 class SeatService:
     @staticmethod
     async def hold_seats(db, redis_client, user_id: str, show_id: str, seat_ids: list[str]):
+        if not user_id or not user_id.strip():
+            raise ValueError("User ID cannot be empty.")
+
         stmt = (
             select(ShowSeat)
             .where(ShowSeat.show_id == show_id, ShowSeat.seat_id.in_(seat_ids))
@@ -53,6 +56,9 @@ class SeatService:
 
     @staticmethod
     async def confirm_booking(db, redis_client, user_id: str, show_id: str, seat_ids: list[str]):
+        if not user_id or not user_id.strip():
+            raise ValueError("User ID cannot be empty.")
+
         # Verify hold ownership against memory map
         for seat_id in seat_ids:
             owner = _HOLD_OWNERS.get((show_id, seat_id))
