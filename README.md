@@ -1,27 +1,52 @@
-# High-Concurrency Ticket Booking System
+# 🎫 High-Concurrency Ticket Booking System
 
-Production-grade event ticket booking engine implemented in Python (FastAPI, SQLAlchemy, PostgreSQL, and Redis).
+A production-grade, full-stack event ticketing platform built with **FastAPI**, **Streamlit**, **SQLAlchemy**, and **Redis**. Designed to handle concurrent seat holds, automatic reservation expiry, waitlist queues, and real-time QR-code ticket email delivery.
 
-## Features
-* **Pessimistic Concurrency Locking:** Uses PostgreSQL `FOR UPDATE NOWAIT` to prevent duplicate seat holds.
-* **TTL Auto-Release:** Automatically releases abandoned held seats after 10 minutes using Redis TTL.
-* **Waitlist Auto-Assignment:** First-In-First-Out (FIFO) queue that offers released/cancelled seats to queued users with time-limited claims.
-* **QR Ticket Generation:** Generates base64 QR codes upon confirmed booking and sends email notifications.
+---
 
-## Project Structure
-```text
-ticket-booking-system/
-├── app/
-│   ├── main.py
-│   ├── config.py
-│   ├── database.py
-│   ├── models.py
-│   └── services/
-│       ├── seat_service.py
-│       ├── waitlist_service.py
-│       └── notification_service.py
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── SYSTEM_DESIGN.md
-└── README.md
+## 🚀 Live Links
+
+* **Frontend UI (Streamlit):** https://ticket-booking-system-user-interface.onrender.com/
+* **Backend API (FastAPI):** https://ticket-booking-system-my6q.onrender.com
+* **Interactive API Docs (Swagger UI):** https://ticket-booking-system-my6q.onrender.com/docs
+
+---
+
+## ✨ Key Features
+
+* **Visual Seat Map & Holding:** Real-time seat locking with automatic TTL expiry to prevent double bookings.
+* **Inline QR Ticket Generation:** Dynamically generates base64/CID embedded QR codes sent directly to user inboxes upon confirmation.
+* **Waitlist & Reallocation Engine:** Automatic queue reallocation when bookings are canceled or expired.
+* **Dual-Tier Architecture:** Asynchronous FastAPI backend separated from an interactive Streamlit administrative dashboard.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Frontend:** Streamlit, Python Requests
+* **Backend Framework:** FastAPI, Uvicorn
+* **Database & ORM:** SQLite (`aiosqlite`), Async SQLAlchemy
+* **Caching & Queues:** Redis
+* **Notifications & Tools:** Python `smtplib`, `MIMEImage`, `qrcode`, `Pillow`
+* **Deployment:** Render (Web Services)
+
+---
+
+## 💻 Local Setup & Running
+
+### 1. Prerequisites
+* Python 3.10+
+* Redis running locally (`redis://localhost:6379`)
+
+### 2. Installation
+```bash
+# Clone repository
+git clone [https://github.com/YOUR_USERNAME/ticket-booking-system.git](https://github.com/YOUR_USERNAME/ticket-booking-system.git)
+cd ticket-booking-system
+
+# Virtual environment setup
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
